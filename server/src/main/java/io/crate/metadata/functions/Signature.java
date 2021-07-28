@@ -28,6 +28,7 @@ import io.crate.metadata.FunctionType;
 import io.crate.metadata.Scalar;
 import io.crate.types.DataType;
 import io.crate.types.TypeSignature;
+import org.elasticsearch.Version;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
@@ -149,6 +150,7 @@ public final class Signature implements Writeable {
         private List<TypeSignature> variableArityGroup = Collections.emptyList();
         private boolean variableArity = false;
         private boolean allowCoercion = true;
+        private Boolean ignoreNulls;
 
         public Builder() {
         }
@@ -165,6 +167,7 @@ public final class Signature implements Writeable {
                 variableArity = signature.getBindingInfo().isVariableArity();
                 allowCoercion = signature.getBindingInfo().isCoercionAllowed();
             }
+            ignoreNulls = signature.ignoreNulls();
         }
 
         public Builder name(String name) {
@@ -225,6 +228,11 @@ public final class Signature implements Writeable {
             return this;
         }
 
+        public Builder setIgnoreNulls(Boolean ignoreNulls) {
+            this.ignoreNulls = ignoreNulls;
+            return this;
+        }
+
         public Signature build() {
             assert name != null : "Signature requires the 'name' to be set";
             assert kind != null : "Signature requires the 'kind' to be set";
@@ -238,7 +246,8 @@ public final class Signature implements Writeable {
                 features,
                 variableArityGroup,
                 variableArity,
-                allowCoercion);
+                allowCoercion,
+                ignoreNulls);
         }
     }
 
@@ -250,6 +259,8 @@ public final class Signature implements Writeable {
     private final Set<Scalar.Feature> features;
     @Nullable
     private final SignatureBindingInfo bindingInfo;
+    @Nullable
+    private final Boolean ignoreNulls;
 
     private Signature(FunctionName name,
                       FunctionType kind,
@@ -259,7 +270,8 @@ public final class Signature implements Writeable {
                       Set<Scalar.Feature> features,
                       List<TypeSignature> variableArityGroup,
                       boolean variableArity,
-                      boolean allowCoercion) {
+                      boolean allowCoercion,
+                      Boolean ignoreNulls) {
         this.name = name;
         this.kind = kind;
         this.argumentTypes = argumentTypes;
@@ -271,6 +283,7 @@ public final class Signature implements Writeable {
             variableArity,
             allowCoercion
         );
+        this.ignoreNulls = ignoreNulls;
     }
 
     public Signature(StreamInput in) throws IOException {
@@ -285,6 +298,11 @@ public final class Signature implements Writeable {
         int enumElements = in.readVInt();
         features = Collections.unmodifiableSet(EnumSets.unpackFromInt(enumElements, Scalar.Feature.class));
         bindingInfo = null;
+        if (in.getVersion().onOrAfter(Version.V_4_7_0)) {
+            ignoreNulls = in.readOptionalBoolean();
+        } else {
+            ignoreNulls = null;
+        }
     }
 
     public Signature withTypeVariableConstraints(TypeVariableConstraint... typeVariableConstraints) {
@@ -296,6 +314,12 @@ public final class Signature implements Writeable {
     public Signature withVariableArity() {
         return Signature.builder(this)
             .setVariableArity(true)
+            .build();
+    }
+
+    public Signature withIgnoreNulls(Boolean ignoreNulls) {
+        return Signature.builder(this)
+            .setIgnoreNulls(ignoreNulls)
             .build();
     }
 
@@ -352,6 +376,10 @@ public final class Signature implements Writeable {
         return bindingInfo;
     }
 
+    public Boolean ignoreNulls() {
+        return ignoreNulls;
+    }
+
     @Override
     public void writeTo(StreamOutput out) throws IOException {
         name.writeTo(out);
@@ -362,6 +390,9 @@ public final class Signature implements Writeable {
         }
         TypeSignature.toStream(returnType, out);
         out.writeVInt(EnumSets.packToInt(features));
+        if (out.getVersion().onOrAfter(Version.V_4_7_0)) {
+            out.writeOptionalBoolean(ignoreNulls);
+        }
     }
 
     @Override
@@ -376,12 +407,15 @@ public final class Signature implements Writeable {
         return name.equals(signature.name) &&
                kind == signature.kind &&
                argumentTypes.equals(signature.argumentTypes) &&
-               returnType.equals(signature.returnType);
+               returnType.equals(signature.returnType) &&
+               ((ignoreNulls != null && ((Signature) o).ignoreNulls != null &&
+                 ignoreNulls.equals(((Signature) o).ignoreNulls)) ||
+                ignoreNulls == null && ((Signature) o).ignoreNulls == null);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(name, kind, argumentTypes, returnType);
+        return Objects.hash(name, kind, argumentTypes, returnType, ignoreNulls);
     }
 
     @Override

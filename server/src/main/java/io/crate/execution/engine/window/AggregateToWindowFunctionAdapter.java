@@ -94,9 +94,7 @@ public class AggregateToWindowFunctionAdapter implements WindowFunction {
     public Object execute(int idxInPartition,
                           WindowFrameState frame,
                           List<? extends CollectExpression<Row, ?>> expressions,
-                          Boolean ignoreNulls,
                           Input... args) {
-        assert ignoreNulls == null;
         if (idxInPartition == 0) {
             recomputeFunction(frame, expressions, args);
         } else if (isLowerBoundIncreasing(frame, seenFrameLowerBound)) {

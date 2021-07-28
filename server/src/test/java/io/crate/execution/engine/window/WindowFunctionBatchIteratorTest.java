@@ -66,7 +66,6 @@ public class WindowFunctionBatchIteratorTest extends ESTestCase {
                 public Object execute(int idxInPartition,
                                       WindowFrameState currentFrame,
                                       List<? extends CollectExpression<Row, ?>> expressions,
-                                      Boolean ignoreNulls,
                                       Input... args) {
                     return idxInPartition + 1;
                 }

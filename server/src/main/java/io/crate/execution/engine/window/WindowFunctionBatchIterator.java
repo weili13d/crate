@@ -239,7 +239,7 @@ public final class WindowFunctionBatchIterator {
         Object[] row = rows.get(idx);
         for (int c = 0; c < windowFunctions.size(); c++) {
             WindowFunction windowFunction = windowFunctions.get(c);
-            Object result = windowFunction.execute(idxInPartition, frame, argsExpressions, ignoreNulls[c], args[c]);
+            Object result = windowFunction.execute(idxInPartition, frame, argsExpressions, args[c]);
             row[numCellsInSourceRow + c] = result;
         }
         return row;

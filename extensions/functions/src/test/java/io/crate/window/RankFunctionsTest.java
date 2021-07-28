@@ -193,8 +193,9 @@ public class RankFunctionsTest extends AbstractWindowFunctionTest {
                 List.of(new ColumnIdent("x")),
                 new Object[] {1}
             ),
-            IllegalArgumentException.class,
-            "rank cannot accept RESPECT or IGNORE NULLS flag."
+            UnsupportedOperationException.class,
+            "Unknown function: rank()"
         );
+        /*** need the exception msg to say rank() ignore nulls ***/
     }
 }

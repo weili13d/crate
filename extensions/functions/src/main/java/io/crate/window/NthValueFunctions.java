@@ -40,88 +40,105 @@ import static io.crate.types.TypeSignature.parseTypeSignature;
 public class NthValueFunctions implements WindowFunction {
 
     private enum Implementation {
-        FIRST_VALUE {
+        FIRST_VALUE_RESPECT_NULLS {
             @Override
             public Object execute(int adjustForShrinkingWindow,
                                   WindowFrameState currentFrame,
                                   List<? extends CollectExpression<Row, ?>> expressions,
-                                  boolean ignoreNulls,
                                   Input... args) {
-                if (ignoreNulls) {
-                    for (int i = adjustForShrinkingWindow; i < currentFrame.upperBoundExclusive(); i++) {
-                        Object[] nthRowCells = currentFrame.getRowInFrameAtIndexOrNull(i);
-                        if (nthRowCells != null) {
-                            Object value = extractValueFromRow(nthRowCells, expressions, args);
-                            if (value != null) {
-                                return value;
-                            }
+                return extractValueAtIndex(adjustForShrinkingWindow,
+                                           currentFrame,
+                                           expressions,
+                                           args);
+            }
+        },
+        FIRST_VALUE_IGNORE_NULLS {
+            @Override
+            public Object execute(int adjustForShrinkingWindow,
+                                  WindowFrameState currentFrame,
+                                  List<? extends CollectExpression<Row, ?>> expressions,
+                                  Input... args) {
+                for (int i = adjustForShrinkingWindow; i < currentFrame.upperBoundExclusive(); i++) {
+                    Object[] nthRowCells = currentFrame.getRowInFrameAtIndexOrNull(i);
+                    if (nthRowCells != null) {
+                        Object value = extractValueFromRow(nthRowCells, expressions, args);
+                        if (value != null) {
+                            return value;
                         }
                     }
-                } else {
-                    return extractValueAtIndex(adjustForShrinkingWindow,
-                                               currentFrame,
-                                               expressions,
-                                               args);
                 }
                 return null;
             }
         },
-        LAST_VALUE {
+        LAST_VALUE_RESPECT_NULLS {
             @Override
             public Object execute(int adjustForShrinkingWindow,
                                   WindowFrameState currentFrame,
                                   List<? extends CollectExpression<Row, ?>> expressions,
-                                  boolean ignoreNulls,
                                   Input... args) {
-                if (ignoreNulls) {
-                    for (int i = adjustForShrinkingWindow + currentFrame.size() - 1; i >= 0; i--) {
-                        Object[] nthRowCells = currentFrame.getRowInFrameAtIndexOrNull(i);
-                        if (nthRowCells != null) {
-                            Object value = extractValueFromRow(nthRowCells, expressions, args);
-                            if (value != null) {
-                                return value;
-                            }
+                return extractValueAtIndex(adjustForShrinkingWindow + currentFrame.size() - 1,
+                                           currentFrame,
+                                           expressions,
+                                           args);
+            }
+        },
+        LAST_VALUE_IGNORE_NULLS {
+            @Override
+            public Object execute(int adjustForShrinkingWindow,
+                                  WindowFrameState currentFrame,
+                                  List<? extends CollectExpression<Row, ?>> expressions,
+                                  Input... args) {
+                for (int i = adjustForShrinkingWindow + currentFrame.size() - 1; i >= 0; i--) {
+                    Object[] nthRowCells = currentFrame.getRowInFrameAtIndexOrNull(i);
+                    if (nthRowCells != null) {
+                        Object value = extractValueFromRow(nthRowCells, expressions, args);
+                        if (value != null) {
+                            return value;
                         }
                     }
-                } else {
-                    return extractValueAtIndex(adjustForShrinkingWindow + currentFrame.size() - 1,
-                                               currentFrame,
-                                               expressions,
-                                               args);
                 }
                 return null;
             }
         },
-        NTH_VALUE {
+        NTH_VALUE_RESPECT_NULLS {
             @Override
             public Object execute(int adjustForShrinkingWindow,
                                   WindowFrameState currentFrame,
                                   List<? extends CollectExpression<Row, ?>> expressions,
-                                  boolean ignoreNulls,
                                   Input... args) {
                 Number position = (Number) args[1].value();
                 if (position == null) {
                     return null;
                 }
                 int iPosition = position.intValue();
-                if (ignoreNulls) {
-                    for (int i = adjustForShrinkingWindow, counter = 0; i < currentFrame.upperBoundExclusive(); i++) {
-                        Object[] nthRowCells = currentFrame.getRowInFrameAtIndexOrNull(i);
-                        if (nthRowCells != null) {
-                            Object value = extractValueFromRow(nthRowCells, expressions, args);
-                            if (value != null) {
-                                counter++;
-                                if (counter == iPosition) {
-                                    return value;
-                                }
+                return extractValueAtIndex(adjustForShrinkingWindow + iPosition - 1,
+                                           currentFrame,
+                                           expressions,
+                                           args);
+            }
+        },
+        NTH_VALUE_IGNORE_NULLS {
+            @Override
+            public Object execute(int adjustForShrinkingWindow,
+                                  WindowFrameState currentFrame,
+                                  List<? extends CollectExpression<Row, ?>> expressions,
+                                  Input... args) {
+                Number position = (Number) args[1].value();
+                if (position == null) {
+                    return null;
+                }
+                int iPosition = position.intValue();
+                for (int i = adjustForShrinkingWindow, counter = 0; i < currentFrame.upperBoundExclusive(); i++) {
+                    Object[] nthRowCells = currentFrame.getRowInFrameAtIndexOrNull(i);
+                    if (nthRowCells != null) {
+                        Object value = extractValueFromRow(nthRowCells, expressions, args);
+                        if (value != null) {
+                            counter++;
+                            if (counter == iPosition) {
+                                return value;
                             }
                         }
                     }
-                } else {
-                    return extractValueAtIndex(adjustForShrinkingWindow + iPosition - 1,
-                                               currentFrame,
-                                               expressions,
-                                               args);
                 }
                 return null;
             }
@@ -130,7 +147,6 @@ public class NthValueFunctions implements WindowFunction {
         public abstract Object execute(int adjustForShrinkingWindow,
                                        WindowFrameState currentFrame,
                                        List<? extends CollectExpression<Row, ?>> expressions,
-                                       boolean ignoreNulls,
                                        Input[] args);
 
         protected Object extractValueFromRow(Object[] nthRowCells,
@@ -161,12 +177,42 @@ public class NthValueFunctions implements WindowFunction {
                 FIRST_VALUE_NAME,
                 parseTypeSignature("E"),
                 parseTypeSignature("E")
-            ).withTypeVariableConstraints(typeVariable("E")),
+            ).withTypeVariableConstraints(typeVariable("E"))
+            .withIgnoreNulls(Boolean.FALSE),
             (signature, boundSignature) ->
                 new NthValueFunctions(
                     signature,
                     boundSignature,
-                    Implementation.FIRST_VALUE
+                    Implementation.FIRST_VALUE_RESPECT_NULLS
+                )
+        );
+        module.register(
+            Signature.window(
+                FIRST_VALUE_NAME,
+                parseTypeSignature("E"),
+                parseTypeSignature("E")
+            ).withTypeVariableConstraints(typeVariable("E"))
+                .withIgnoreNulls(Boolean.TRUE),
+            (signature, boundSignature) ->
+                new NthValueFunctions(
+                    signature,
+                    boundSignature,
+                    Implementation.FIRST_VALUE_IGNORE_NULLS
+                )
+        );
+
+        module.register(
+            Signature.window(
+                FIRST_VALUE_NAME,
+                parseTypeSignature("E"),
+                parseTypeSignature("E")
+            ).withTypeVariableConstraints(typeVariable("E"))
+                .withIgnoreNulls(null),
+            (signature, boundSignature) ->
+                new NthValueFunctions(
+                    signature,
+                    boundSignature,
+                    Implementation.FIRST_VALUE_RESPECT_NULLS
                 )
         );
 
@@ -175,12 +221,43 @@ public class NthValueFunctions implements WindowFunction {
                 LAST_VALUE_NAME,
                 parseTypeSignature("E"),
                 parseTypeSignature("E")
-            ).withTypeVariableConstraints(typeVariable("E")),
+            ).withTypeVariableConstraints(typeVariable("E"))
+            .withIgnoreNulls(Boolean.FALSE),
             (signature, boundSignature) ->
                 new NthValueFunctions(
                     signature,
                     boundSignature,
-                    Implementation.LAST_VALUE
+                    Implementation.LAST_VALUE_RESPECT_NULLS
+                )
+        );
+
+        module.register(
+            Signature.window(
+                LAST_VALUE_NAME,
+                parseTypeSignature("E"),
+                parseTypeSignature("E")
+            ).withTypeVariableConstraints(typeVariable("E"))
+                .withIgnoreNulls(Boolean.TRUE),
+            (signature, boundSignature) ->
+                new NthValueFunctions(
+                    signature,
+                    boundSignature,
+                    Implementation.LAST_VALUE_IGNORE_NULLS
+                )
+        );
+
+        module.register(
+            Signature.window(
+                LAST_VALUE_NAME,
+                parseTypeSignature("E"),
+                parseTypeSignature("E")
+            ).withTypeVariableConstraints(typeVariable("E"))
+                .withIgnoreNulls(null),
+            (signature, boundSignature) ->
+                new NthValueFunctions(
+                    signature,
+                    boundSignature,
+                    Implementation.LAST_VALUE_RESPECT_NULLS
                 )
         );
 
@@ -190,12 +267,45 @@ public class NthValueFunctions implements WindowFunction {
                 parseTypeSignature("E"),
                 DataTypes.INTEGER.getTypeSignature(),
                 parseTypeSignature("E")
-            ).withTypeVariableConstraints(typeVariable("E")),
+            ).withTypeVariableConstraints(typeVariable("E"))
+            .withIgnoreNulls(Boolean.FALSE),
             (signature, boundSignature) ->
                 new NthValueFunctions(
                     signature,
                     boundSignature,
-                    Implementation.NTH_VALUE
+                    Implementation.NTH_VALUE_RESPECT_NULLS
+                )
+        );
+
+        module.register(
+            Signature.window(
+                NTH_VALUE_NAME,
+                parseTypeSignature("E"),
+                DataTypes.INTEGER.getTypeSignature(),
+                parseTypeSignature("E")
+            ).withTypeVariableConstraints(typeVariable("E"))
+                .withIgnoreNulls(Boolean.TRUE),
+            (signature, boundSignature) ->
+                new NthValueFunctions(
+                    signature,
+                    boundSignature,
+                    Implementation.NTH_VALUE_IGNORE_NULLS
+                )
+        );
+
+        module.register(
+            Signature.window(
+                NTH_VALUE_NAME,
+                parseTypeSignature("E"),
+                DataTypes.INTEGER.getTypeSignature(),
+                parseTypeSignature("E")
+            ).withTypeVariableConstraints(typeVariable("E"))
+                .withIgnoreNulls(null),
+            (signature, boundSignature) ->
+                new NthValueFunctions(
+                    signature,
+                    boundSignature,
+                    Implementation.NTH_VALUE_RESPECT_NULLS
                 )
         );
     }
@@ -233,9 +343,7 @@ public class NthValueFunctions implements WindowFunction {
     public Object execute(int idxInPartition,
                           WindowFrameState currentFrame,
                           List<? extends CollectExpression<Row, ?>> expressions,
-                          Boolean ignoreNulls,
                           Input... args) {
-        boolean ignoreNullsOrFalse = ignoreNulls != null && ignoreNulls;
         boolean shrinkingWindow = isLowerBoundIncreasing(currentFrame, seenFrameLowerBound);
         if (idxInPartition == 0 || currentFrame.upperBoundExclusive() > seenFrameUpperBound || shrinkingWindow) {
 
@@ -255,7 +363,6 @@ public class NthValueFunctions implements WindowFunction {
             resultForCurrentFrame = implementation.execute(adjustForShrinkingWindow,
                                                            currentFrame,
                                                            expressions,
-                                                           ignoreNullsOrFalse,
                                                            args);
             seenFrameLowerBound = currentFrame.lowerBound();
             seenFrameUpperBound = currentFrame.upperBoundExclusive();

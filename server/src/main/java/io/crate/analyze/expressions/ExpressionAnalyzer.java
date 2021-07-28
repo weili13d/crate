@@ -1129,11 +1129,21 @@ public class ExpressionAnalyzer {
                                                        @Nullable WindowDefinition windowDefinition,
                                                        CoordinatorTxnCtx coordinatorTxnCtx,
                                                        NodeContext nodeCtx) {
-        FunctionImplementation funcImpl = nodeCtx.functions().get(
-            schema,
-            functionName,
-            arguments,
-            coordinatorTxnCtx.sessionContext().searchPath());
+        FunctionImplementation funcImpl;
+        if (ignoreNulls != null) {
+            funcImpl = nodeCtx.functions().get(
+                schema,
+                functionName,
+                arguments,
+                ignoreNulls,
+                coordinatorTxnCtx.sessionContext().searchPath());
+        } else {
+            funcImpl = nodeCtx.functions().get(
+                schema,
+                functionName,
+                arguments,
+                coordinatorTxnCtx.sessionContext().searchPath());
+        }
 
         Signature signature = funcImpl.signature();
         Signature boundSignature = funcImpl.boundSignature();

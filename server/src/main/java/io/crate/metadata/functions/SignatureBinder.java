@@ -143,6 +143,7 @@ public class SignatureBinder {
             .argumentTypes(boundArgumentSignatures)
             .returnType(boundReturnTypeSignature)
             .setVariableArity(false)
+            .setIgnoreNulls(signature.ignoreNulls())
             .build();
     }
 

@@ -36,6 +36,7 @@ import java.util.List;
 
 import static io.crate.testing.SymbolMatchers.isReference;
 import static org.hamcrest.Matchers.contains;
+import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.instanceOf;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.core.Is.is;
@@ -103,9 +104,10 @@ public class SelectWindowFunctionAnalyzerTest extends CrateDummyClusterServiceUn
 
     @Test
     public void testAggregatesCannotAcceptIgnoreOrRespectNullsFlag() {
-        var exception = assertThrows(IllegalArgumentException.class,
+        /*** need expection message to say avg(x) ignore nulls ***/
+        var exception = assertThrows(UnsupportedOperationException.class,
                      () -> e.analyze("select avg(x) ignore nulls OVER() from t"));
-        assertEquals("avg cannot accept RESPECT or IGNORE NULLS flag.", exception.getMessage());
+        assertThat(exception.getMessage(), containsString("Unknown function: avg(doc.t.x)"));
     }
 
     @Test

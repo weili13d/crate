@@ -101,8 +101,9 @@ public class RowNumberWindowFunctionTest extends AbstractWindowFunctionTest {
                 List.of(new ColumnIdent("x")),
                 new Object[] {1}
             ),
-            IllegalArgumentException.class,
-            "row_number cannot accept RESPECT or IGNORE NULLS flag."
+            UnsupportedOperationException.class,
+            "Unknown function: row_number()"
         );
+        /*** need the exception msg to say row_number() ignore nulls ***/
     }
 }

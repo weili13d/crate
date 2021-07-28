@@ -55,11 +55,7 @@ public class RowNumberWindowFunction implements WindowFunction {
     public Object execute(int idxInPartition,
                           WindowFrameState currentFrame,
                           List<? extends CollectExpression<Row, ?>> expressions,
-                          Boolean ignoreNulls,
                           Input... args) {
-        if (ignoreNulls != null) {
-            throw new IllegalArgumentException("row_number cannot accept RESPECT or IGNORE NULLS flag.");
-        }
         return idxInPartition + 1;
     }
 

@@ -121,6 +121,14 @@ public class Functions {
         return get(suppliedSchema, functionName, Symbols.typeView(arguments), arguments, searchPath);
     }
 
+    public FunctionImplementation get(@Nullable String suppliedSchema,
+                                      String functionName,
+                                      List<Symbol> arguments,
+                                      Boolean ignoreNulls,
+                                      SearchPath searchPath) {
+        return get(suppliedSchema, functionName, Symbols.typeView(arguments), arguments, ignoreNulls, searchPath);
+    }
+
     /**
      * Return a function that matches the name/arguments.
      *
@@ -162,6 +170,36 @@ public class Functions {
         return func;
     }
 
+    private FunctionImplementation get(@Nullable String suppliedSchema,
+                                       String functionName,
+                                       List<DataType<?>> argumentTypes,
+                                       List<Symbol> arguments,
+                                       Boolean ignoreNulls,
+                                       SearchPath searchPath) {
+        FunctionName fqnName = new FunctionName(suppliedSchema, functionName);
+        FunctionImplementation func = resolveFunctionBySignature(
+            fqnName,
+            argumentTypes,
+            arguments,
+            ignoreNulls,
+            searchPath,
+            functionImplementations
+        );
+        if (func == null) {
+            func = resolveFunctionBySignature(
+                fqnName,
+                argumentTypes,
+                arguments,
+                ignoreNulls,
+                searchPath,
+                udfFunctionImplementations
+            );
+        }
+        if (func == null) {
+            raiseUnknownFunction(suppliedSchema, functionName, arguments, ignoreNulls, List.of());
+        }
+        return func;
+    }
 
     @Nullable
     private FunctionImplementation get(Signature signature,
@@ -239,6 +277,62 @@ public class Functions {
     }
 
     @Nullable
+    private static FunctionImplementation resolveFunctionBySignature(FunctionName name,
+                                                                     List<DataType<?>> argumentTypes,
+                                                                     List<Symbol> arguments,
+                                                                     Boolean ignoreNulls,
+                                                                     SearchPath searchPath,
+                                                                     Map<FunctionName, List<FunctionProvider>> candidatesByName) {
+        var candidates = getCandidates(name, searchPath, candidatesByName);
+        if (candidates == null) {
+            return null;
+        }
+
+        assert candidates.stream().allMatch(f -> f.getSignature().getBindingInfo() != null) :
+            "Resolving/Matching of signatures can only be done with non-null signature's binding info";
+
+        // First lets try exact candidates, no generic type variables, no coercion allowed.
+        Iterable<FunctionProvider> exactCandidates = () -> candidates.stream()
+            .filter(function -> function.getSignature().getBindingInfo().getTypeVariableConstraints().isEmpty())
+            .iterator();
+        var match = matchFunctionCandidates(exactCandidates, argumentTypes, ignoreNulls, SignatureBinder.CoercionType.NONE);
+        if (match != null) {
+            return match;
+        }
+
+        // Second, try candidates with generic type variables, still no coercion allowed.
+        Iterable<FunctionProvider> genericCandidates = () -> candidates.stream()
+            .filter(function -> !function.getSignature().getBindingInfo().getTypeVariableConstraints().isEmpty())
+            .iterator();
+        match = matchFunctionCandidates(genericCandidates, argumentTypes, ignoreNulls, SignatureBinder.CoercionType.NONE);
+        if (match != null) {
+            return match;
+        }
+
+        // Third, try all candidates which allow coercion with precedence based coercion.
+        Iterable<FunctionProvider> candidatesAllowingCoercion = () -> candidates.stream()
+            .filter(function -> function.getSignature().getBindingInfo().isCoercionAllowed())
+            .iterator();
+        match = matchFunctionCandidates(
+            candidatesAllowingCoercion,
+            argumentTypes,
+            ignoreNulls,
+            SignatureBinder.CoercionType.PRECEDENCE_ONLY
+        );
+        if (match != null) {
+            return match;
+        }
+
+        // Last, try all candidates which allow coercion with full coercion.
+        match = matchFunctionCandidates(candidatesAllowingCoercion, argumentTypes, ignoreNulls, SignatureBinder.CoercionType.FULL);
+
+        if (match == null) {
+            raiseUnknownFunction(name.schema(), name.name(), arguments, ignoreNulls, candidates);
+        }
+        return match;
+    }
+
+    @Nullable
     private static List<FunctionProvider> getCandidates(FunctionName name,
                                                         SearchPath searchPath,
                                                         Map<FunctionName, List<FunctionProvider>> candidatesByName) {
@@ -259,8 +353,19 @@ public class Functions {
     private static FunctionImplementation matchFunctionCandidates(Iterable<FunctionProvider> candidates,
                                                                   List<DataType<?>> arguments,
                                                                   SignatureBinder.CoercionType coercionType) {
+        return matchFunctionCandidates(candidates, arguments, null, coercionType);
+    }
+
+    @Nullable
+    private static FunctionImplementation matchFunctionCandidates(Iterable<FunctionProvider> candidates,
+                                                                  List<DataType<?>> arguments,
+                                                                  Boolean ignoreNulls,
+                                                                  SignatureBinder.CoercionType coercionType) {
         List<ApplicableFunction> applicableFunctions = new ArrayList<>();
         for (FunctionProvider candidate : candidates) {
+            if (candidate.getSignature().ignoreNulls() != ignoreNulls) {
+                continue;
+            }
             Signature boundSignature = new SignatureBinder(candidate.getSignature(), coercionType)
                 .bind(Lists2.map(arguments, DataType::getTypeSignature));
             if (boundSignature != null) {
@@ -382,6 +487,50 @@ public class Functions {
                               TypeSignature::toString)
                                + "):" + c.getSignature().getReturnType().toString())
                       ;
+        }
+
+        throw new UnsupportedOperationException(message);
+    }
+
+    @VisibleForTesting
+    static void raiseUnknownFunction(@Nullable String suppliedSchema,
+                                     String name,
+                                     List<Symbol> arguments,
+                                     Boolean ignoreNulls,
+                                     List<FunctionProvider> candidates) {
+        List<DataType<?>> argumentTypes = Symbols.typeView(arguments);
+        var function = new io.crate.expression.symbol.Function(
+            Signature.builder()
+                .name(new FunctionName(suppliedSchema, name))
+                .argumentTypes(Lists2.map(argumentTypes, DataType::getTypeSignature))
+                .returnType(DataTypes.UNDEFINED.getTypeSignature())
+                .kind(FunctionType.SCALAR)
+                .setIgnoreNulls(ignoreNulls)
+                .build(),
+            arguments,
+            DataTypes.UNDEFINED
+        );
+
+        var message = "Unknown function: " + function.toString(Style.QUALIFIED);
+        if (candidates.isEmpty() == false) {
+            if (arguments.isEmpty() == false) {
+                message = message + ", no overload found for matching argument types: "
+                          + "(" + Lists2.joinOn(", ", argumentTypes, DataType::toString) + ").";
+            } else {
+                message = message + ".";
+            }
+            message = message + " Possible candidates: "
+                      + Lists2.joinOn(
+                          ", ",
+                          candidates,
+                          c -> c.getSignature().getName().displayName()
+                               + "("
+                               + Lists2.joinOn(
+                              ", ",
+                              c.getSignature().getArgumentTypes(),
+                              TypeSignature::toString)
+                               + "):" + c.getSignature().getReturnType().toString())
+                    ;
         }
 
         throw new UnsupportedOperationException(message);
