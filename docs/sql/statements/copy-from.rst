@@ -372,6 +372,18 @@ specifies the size of one batch. The provided value must be greater than 0, the
 default value is 10000.
 
 
+.. _sql-copy-from-fail_fast:
+
+``fail_fast``
+'''''''''''''
+
+With this option set to true, CrateDB will check for any errors at the end of
+each batch processing, specified by the
+:ref:`bulk_size <sql-copy-from-bulk_size>`. Any occurrences of the errors will
+trigger the execution to terminate that will prevent executing further while
+completing any in-flight executions normally.
+
+
 .. _sql-copy-from-shared:
 
 ``shared``

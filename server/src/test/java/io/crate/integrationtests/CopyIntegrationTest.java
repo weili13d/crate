@@ -59,6 +59,7 @@ import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.greaterThanOrEqualTo;
+import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
@@ -844,5 +845,60 @@ public class CopyIntegrationTest extends SQLHttpIntegrationTest {
         assertThat(printedTable(response.rows()), is(
             "1626188198073| 1625097600000\n"
         ));
+    }
+
+    @Test
+    public void test_copy_from_with_fail_fast_property_set_to_false() throws Exception {
+        execute("CREATE TABLE t (a int)");
+        execute(
+            "COPY t FROM ? WITH (bulk_size = 1, fail_fast = false, shared = true)",
+            new Object[]{copyFilePath + "test_copy_from_fail_fast.json"});
+        refresh();
+        execute("select * from t");
+        assertThat(response.rowCount(), is(200L));
+    }
+
+    @Test
+    public void test_copy_from_with_fail_fast_property_set_to_true_without_return_summary() throws Exception {
+        execute("CREATE TABLE t (a int) clustered into 1 shards");
+        int retry = 0;
+        final int maxRetry = 30;
+        while (retry < maxRetry) {
+            execute(
+                "COPY t FROM ? WITH (shared = true, bulk_size = 1, fail_fast = true)",
+                new Object[]{copyFilePath + "test_copy_from_fail_fast.json"});
+            refresh();
+            execute("select * from t");
+            // first ten rows from test_copy_from_fail_fast.json should be successful
+            // strictly less than 200L implies fail_fast occurred
+            if (response.rowCount() >= 10L && response.rowCount() < 200L) {
+                break;
+            }
+            execute("delete from t");
+            retry++;
+        }
+        assertThat(retry, is(lessThan(maxRetry)));
+    }
+
+    @Test
+    public void test_copy_from_with_fail_fast_property_set_to_true_with_return_summary() throws Exception {
+        execute("CREATE TABLE t (a int) clustered into 1 shards");
+        int retry = 0;
+        final int maxRetry = 30;
+        while (retry < maxRetry) {
+            execute(
+                "COPY t FROM ? WITH (shared = true, bulk_size = 1, fail_fast = true) return summary",
+                new Object[]{copyFilePath + "test_copy_from_fail_fast.json"});
+            refresh();
+            execute("select * from t");
+            // first ten rows from test_copy_from_fail_fast.json should be successful
+            // strictly less than 200L implies fail_fast occurred
+            if (response.rowCount() >= 10L && response.rowCount() < 200L) {
+                break;
+            }
+            execute("delete from t");
+            retry++;
+        }
+        assertThat(retry, is(lessThan(maxRetry)));
     }
 }

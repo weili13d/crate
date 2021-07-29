@@ -421,7 +421,11 @@ public class ProjectionToProjectorVisitor
                 clusterService.localNode(),
                 inputFactory);
         } else {
-            upsertResultContext = UpsertResultContext.forRowCount();
+            if (projection.isFailFast()) {
+                upsertResultContext = UpsertResultContext.forRowAndErrorCount();
+            } else {
+                upsertResultContext = UpsertResultContext.forRowCount();
+            }
         }
         return new IndexWriterProjector(
             clusterService,

@@ -110,7 +110,11 @@ public class BatchIteratorBackpressureExecutor<T, R> {
 
     private void continueConsumptionOrFinish(@Nullable R result, Throwable failure) {
         if (result != null) {
-            resultRef.accumulateAndGet(result, combiner);
+            try {
+                resultRef.accumulateAndGet(result, combiner);
+            } catch (RuntimeException e) {
+                consumptionFinished = true;
+            }
         }
         if (failure != null) {
             failureRef.set(failure);
@@ -155,7 +159,7 @@ public class BatchIteratorBackpressureExecutor<T, R> {
             return;
         }
         try {
-            while (batchIterator.moveNext()) {
+            while (!consumptionFinished && batchIterator.moveNext()) {
                 T item = batchIterator.currentElement();
                 if (pauseConsumption.test(item)) {
                     long delayInMs = getDelayInMs.apply(item);

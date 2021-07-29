@@ -60,6 +60,9 @@ Changes
 - Introduced ``RESPECT NULLS`` and ``IGNORE NULLS`` flags to window function
   calls. The following window functions can now utilize the flags: ``LEAD``,
   ``LAG``, ``NTH_VALUE``, ``FIRST_VALUE``, and ``LAST_VALUE``.
+- Added ``FAIL_FAST`` option to ``COPY FROM`` statement that when it is set to
+  true, any errors observed while processing the statement will trigger an
+  early completion of the execution without processing further.
 
 
 Fixes

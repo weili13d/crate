@@ -36,6 +36,23 @@ import java.util.function.Predicate;
 
 public class UpsertResultContext {
 
+    public static UpsertResultContext forRowAndErrorCount() {
+        return new UpsertResultContext(
+            () -> null, () -> null, () -> null, Collections.emptyList(), UpsertResultCollectors.failFast(
+                UpsertResultCollectors.newRowAndErrorCountCollector())) {
+
+            @Override
+            BiConsumer<ShardedRequests, String> getItemFailureRecorder() {
+                return (s, f) -> { };
+            }
+
+            @Override
+            Predicate<ShardedRequests> getHasSourceUriFailureChecker() {
+                return (ignored) -> false;
+            }
+        };
+    }
+
     public static UpsertResultContext forRowCount() {
         return new UpsertResultContext(
             () -> null, () -> null, () -> null, Collections.emptyList(), UpsertResultCollectors.newRowCountCollector()) {
@@ -80,12 +97,17 @@ public class UpsertResultContext {
         //noinspection unchecked
         Input<Long> lineNumberInput = (Input<Long>) ctxSourceInfo.add(projection.lineNumber());
 
+        var collector = UpsertResultCollectors.newSummaryCollector(discoveryNode);
+        if (projection.isFailFast()) {
+            collector = UpsertResultCollectors.failFast(collector);
+        }
+
         return new UpsertResultContext(
             sourceUriInput,
             sourceUriFailureInput,
             lineNumberInput,
             ctxSourceInfo.expressions(),
-            UpsertResultCollectors.newSummaryCollector(discoveryNode));
+            collector);
     }
 
 

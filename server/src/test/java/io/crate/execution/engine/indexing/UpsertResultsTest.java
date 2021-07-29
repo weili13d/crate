@@ -46,4 +46,14 @@ public class UpsertResultsTest {
             "36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49]}}\n"
         ));
     }
+
+    @Test
+    public void testContainsAnyErrorMethod() {
+        UpsertResults upsertResults = new UpsertResults();
+        assertThat(upsertResults.containsAnyErrors(), is(false));
+        upsertResults.addResult(1);
+        assertThat(upsertResults.containsAnyErrors(), is(false));
+        upsertResults.addResult("dummyUri2", "failure test", 1);
+        assertThat(upsertResults.containsAnyErrors(), is(true));
+    }
 }

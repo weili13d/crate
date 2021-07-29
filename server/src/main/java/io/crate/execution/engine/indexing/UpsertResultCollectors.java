@@ -45,11 +45,19 @@ final class UpsertResultCollectors {
         return new RowCountCollector();
     }
 
+    static UpsertResultCollector newRowAndErrorCountCollector() {
+        return new RowAndErrorCountCollector();
+    }
+
     static UpsertResultCollector newSummaryCollector(DiscoveryNode localNode) {
         return new SummaryCollector(Map.of(
             "id", localNode.getId(),
             "name", localNode.getName()
         ));
+    }
+
+    static UpsertResultCollector failFast(UpsertResultCollector delegate) {
+        return new FailFastCollector(delegate);
     }
 
     private static class ResultRowCollector implements UpsertResultCollector {
@@ -133,6 +141,54 @@ final class UpsertResultCollectors {
         }
     }
 
+    private static class RowAndErrorCountCollector implements UpsertResultCollector {
+
+        private final Object lock = new Object();
+
+        @Override
+        public Supplier<UpsertResults> supplier() {
+            return UpsertResults::new;
+        }
+
+        @Override
+        public Accumulator accumulator() {
+            return this::processShardResponse;
+        }
+
+        @Override
+        public BinaryOperator<UpsertResults> combiner() {
+            return (i, o) -> {
+                synchronized (lock) {
+                    i.addResult(o.getSuccessRowCountForNoUri());
+
+                }
+                return i;
+            };
+        }
+
+        @Override
+        public Function<UpsertResults, Iterable<Row>> finisher() {
+            return r -> Collections.singletonList(new Row1(r.getSuccessRowCountForNoUri()));
+        }
+
+        @SuppressWarnings("unused")
+        void processShardResponse(UpsertResults upsertResults,
+                                  ShardResponse shardResponse,
+                                  List<RowSourceInfo> rowSourceInfos) {
+            synchronized (lock) {
+                List<ShardResponse.Failure> failures = shardResponse.failures();
+                IntArrayList locations = shardResponse.itemIndices();
+                for (int i = 0; i < failures.size(); i++) {
+                    ShardResponse.Failure failure = failures.get(i);
+                    int location = locations.get(i);
+                    RowSourceInfo rowSourceInfo = rowSourceInfos.get(location);
+                    String msg = failure == null ? null : failure.message();
+                    upsertResults.addResult(rowSourceInfo.sourceUri, msg, rowSourceInfo.lineNumber);
+                }
+            }
+        }
+    }
+
     private static class SummaryCollector implements UpsertResultCollector {
 
         private final Map<String, String> nodeInfo;
@@ -182,6 +238,42 @@ final class UpsertResultCollectors {
                     upsertResults.addResult(rowSourceInfo.sourceUri, msg, rowSourceInfo.lineNumber);
                 }
             }
+        }
+    }
+
+    private static class FailFastCollector implements UpsertResultCollector {
+
+        private final UpsertResultCollector delegate;
+
+        private FailFastCollector(UpsertResultCollector delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public Supplier<UpsertResults> supplier() {
+            return delegate.supplier();
+        }
+
+        @Override
+        public Accumulator accumulator() {
+            return delegate.accumulator();
+        }
+
+        @Override
+        public BinaryOperator<UpsertResults> combiner() {
+            return (currentResults, resultsToBeAdded) -> {
+                var combined = delegate.combiner().apply(currentResults,resultsToBeAdded);
+                // the second arg being resultsToBeAdded is depended on the implementation of AtomicReference#accumulateAndGet
+                if (resultsToBeAdded.containsAnyErrors()) {
+                    throw new RuntimeException("cannot combine upsert results that contain errors");
+                }
+                return combined;
+            };
+        }
+
+        @Override
+        public Function<UpsertResults, Iterable<Row>> finisher() {
+            return delegate.finisher();
         }
     }
 

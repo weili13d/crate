@@ -85,6 +85,14 @@ class UpsertResults {
         return getResultSafe(null).successRowCount;
     }
 
+    boolean containsAnyErrors() {
+        return resultsByUri.keySet()
+            .stream()
+            .map(this::getResultSafe)
+            .map(res -> res.errorRowCount)
+            .anyMatch(errCount -> errCount > 0);
+    }
+
     List<Object[]> getResultRowsForNoUri() {
         return getResultSafe(null).resultRows;
     }

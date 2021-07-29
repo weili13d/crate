@@ -31,6 +31,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Predicate;
 import java.util.stream.IntStream;
 
+import com.carrotsearch.randomizedtesting.annotations.Repeat;
 import org.elasticsearch.test.ESTestCase;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -40,6 +41,8 @@ import org.junit.Test;
 import io.crate.data.BatchIterator;
 import io.crate.data.InMemoryBatchIterator;
 import io.crate.testing.BatchSimulatingIterator;
+
+import static org.hamcrest.Matchers.is;
 
 public class BatchIteratorBackpressureExecutorTest extends ESTestCase {
 
@@ -87,6 +90,33 @@ public class BatchIteratorBackpressureExecutorTest extends ESTestCase {
         CompletableFuture<Integer> result = executor.consumeIteratorAndExecute();
         result.get(10, TimeUnit.SECONDS);
 
-        assertThat(numPauses.get(), Matchers.is(1));
+        assertThat(numPauses.get(), is(1));
+    }
+
+    @Test
+    public void testThrowingExceptionFromResultAccumulationCausesFastFail() throws Exception {
+        BatchIterator<Integer> numbersBi = InMemoryBatchIterator.of(() -> IntStream.range(0, 5).iterator(), -1, true);
+        BatchSimulatingIterator<Integer> it = new BatchSimulatingIterator<>(numbersBi, 2, 5, executor);
+        AtomicInteger numRows = new AtomicInteger(0);
+
+        BatchIteratorBackpressureExecutor<Integer, Integer> executor = new BatchIteratorBackpressureExecutor<>(
+            UUID.randomUUID(),
+            scheduler,
+            this.executor,
+            it,
+            i -> CompletableFuture.supplyAsync(numRows::incrementAndGet, this.executor),
+            (a, b) -> {
+                if (b == 5) {
+                    throw new RuntimeException();
+                }
+                return a + b;
+            },
+            0,
+            i -> false,
+            ignored -> 1L
+        );
+        CompletableFuture<Integer> result = executor.consumeIteratorAndExecute();
+        var actual = result.get();
+        assertThat(actual, is(10));
     }
 }
