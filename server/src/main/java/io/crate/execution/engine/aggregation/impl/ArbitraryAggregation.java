@@ -205,6 +205,7 @@ public class ArbitraryAggregation extends AggregationFunction<Object, Object> {
                     var value = dataType.sanitizeValue(values.nextValue());
                     ramAccounting.addBytes(sizeEstimator.estimateSize(value));
                     state.setValue(value);
+                    hasState = true;
                 }
             }
         }
@@ -227,6 +228,7 @@ public class ArbitraryAggregation extends AggregationFunction<Object, Object> {
                     var value = NumericUtils.sortableIntToFloat((int) values.nextValue());
                     ramAccounting.addBytes(sizeEstimator.estimateSize(value));
                     state.setValue(value);
+                    hasState = true;
                 }
             }
         }
@@ -249,6 +251,7 @@ public class ArbitraryAggregation extends AggregationFunction<Object, Object> {
                     var value = NumericUtils.sortableLongToDouble(values.nextValue());
                     ramAccounting.addBytes(sizeEstimator.estimateSize(value));
                     state.setValue(value);
+                    hasState = true;
                 }
             }
         }
@@ -257,6 +260,7 @@ public class ArbitraryAggregation extends AggregationFunction<Object, Object> {
     private abstract static class ArbitraryNumericDocValueAggregator implements DocValueAggregator<MutableObject> {
 
         private final String columnName;
+        protected boolean hasState = false;
 
         protected SortedNumericDocValues values;
 
@@ -267,6 +271,11 @@ public class ArbitraryAggregation extends AggregationFunction<Object, Object> {
         @Override
         public MutableObject initialState(RamAccounting ramAccounting, MemoryManager memoryManager, Version minNodeVersion) {
             return new MutableObject();
+        }
+
+        @Override
+        public boolean isResultReady() {
+            return hasState;
         }
 
         @Override
@@ -290,6 +299,7 @@ public class ArbitraryAggregation extends AggregationFunction<Object, Object> {
         private final String columnName;
         private final DataType<?> dataType;
         private final SizeEstimator<Object> sizeEstimator;
+        private boolean hasState = false;
 
         private SortedBinaryDocValues values;
 
@@ -307,6 +317,11 @@ public class ArbitraryAggregation extends AggregationFunction<Object, Object> {
         }
 
         @Override
+        public boolean isResultReady() {
+            return hasState;
+        }
+
+        @Override
         public void loadDocValues(LeafReader reader) throws IOException {
             values = FieldData.toString(DocValues.getSortedSet(reader, columnName));
         }
@@ -318,6 +333,7 @@ public class ArbitraryAggregation extends AggregationFunction<Object, Object> {
                     var value = dataType.sanitizeValue(values.nextValue().utf8ToString());
                     ramAccounting.addBytes(sizeEstimator.estimateSize(value));
                     state.setValue(value);
+                    hasState = true;
                 }
             }
         }

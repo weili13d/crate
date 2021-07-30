@@ -38,6 +38,14 @@ public interface DocValueAggregator<T> {
 
     public void apply(RamAccounting ramAccounting, int doc, T state) throws IOException;
 
+    /**
+     * Some aggregations may return result early, boolean flag is used by a caller to check whether next iteration is needed.
+     * If amount of ready aggregates is equal to aggregates.size() the whole leaf processing can be terminated early.
+     */
+    public default boolean isResultReady() {
+        return false;
+    }
+
     // Aggregations are executed on shard level,
     // that means there is always a final reduce step necessary
     // → never return final value, but always partial result

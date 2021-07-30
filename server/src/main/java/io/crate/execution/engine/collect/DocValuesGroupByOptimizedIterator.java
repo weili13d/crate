@@ -376,21 +376,33 @@ final class DocValuesGroupByOptimizedIterator {
                     K key = keyExtractor.apply(keyExpressions);
 
                     Object[] states = statesByKey.get(key);
+                    int readyAggregatesCount = 0;
                     if (states == null) {
                         states = new Object[aggregators.size()];
                         for (int i = 0; i < aggregators.size(); i++) {
                             var aggregator = aggregators.get(i);
                             states[i] = aggregator.initialState(ramAccounting, memoryManager, minNodeVersion);
                             //noinspection unchecked
-                            aggregator.apply(ramAccounting, doc, states[i]);
+                            if(aggregator.isResultReady()) {
+                                readyAggregatesCount++;
+                            } else {
+                                aggregator.apply(ramAccounting, doc, states[i]);
+                            }
                         }
                         accountForNewKeyEntry.accept(statesByKey, key);
                         statesByKey.put(key, states);
                     } else {
                         for (int i = 0; i < aggregators.size(); i++) {
                             //noinspection unchecked
-                            aggregators.get(i).apply(ramAccounting, doc, states[i]);
+                            if(aggregators.get(i).isResultReady()) {
+                                readyAggregatesCount++;
+                            } else {
+                                aggregators.get(i).apply(ramAccounting, doc, states[i]);
+                            }
                         }
+                    }
+                    if(readyAggregatesCount == aggregators.size()) {
+                        break;
                     }
                 }
             }

@@ -27,9 +27,13 @@ import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
+import org.apache.lucene.document.DoublePoint;
+import org.apache.lucene.document.FloatPoint;
 import org.apache.lucene.index.DocValues;
 import org.apache.lucene.index.LeafReader;
+import org.apache.lucene.index.SortedDocValues;
 import org.apache.lucene.index.SortedNumericDocValues;
+import org.apache.lucene.util.BytesRef;
 import org.apache.lucene.util.NumericUtils;
 import org.elasticsearch.Version;
 import org.elasticsearch.common.breaker.CircuitBreakingException;
@@ -87,7 +91,8 @@ public abstract class MaximumAggregation extends AggregationFunction<Comparable,
 
         private final String columnName;
         private final DataType<?> partialType;
-        private SortedNumericDocValues values;
+        private SortedDocValues values;
+        private boolean hasState = false;
 
         public LongMax(String columnName, DataType<?> partialType) {
             this.columnName = columnName;
@@ -100,19 +105,25 @@ public abstract class MaximumAggregation extends AggregationFunction<Comparable,
             return new MutableLong(Long.MIN_VALUE);
         }
 
+
+        @Override
+        public boolean isResultReady() {
+            return hasState;
+        }
+
         @Override
         public void loadDocValues(LeafReader reader) throws IOException {
-            values = DocValues.getSortedNumeric(reader, columnName);
+            values = DocValues.getSorted(reader, columnName);
+
         }
 
         @Override
         public void apply(RamAccounting ramAccounting, int doc, MutableLong state) throws IOException {
-            if (values.advanceExact(doc) && values.docValueCount() == 1) {
-                long value = values.nextValue();
-                if (value >= state.value()) {
-                    state.setValue(value);
-                }
-            }
+            // Values are sorted from ordinal 0 to getValueCount()-1 in increasing order.
+            // SortedDocValues.lookupTerm utilizes that fact to perform binary search, we can take last for max.
+            BytesRef minRef = values.lookupOrd(values.getValueCount() - 1);
+            state.setValue(NumericUtils.sortableBytesToLong(minRef.bytes, minRef.offset));
+            hasState = true;
         }
 
         @Override
@@ -129,7 +140,8 @@ public abstract class MaximumAggregation extends AggregationFunction<Comparable,
     private static class DoubleMax implements DocValueAggregator<MutableDouble> {
 
         private final String columnName;
-        private SortedNumericDocValues values;
+        private SortedDocValues values;
+        private boolean hasState = false;
 
         public DoubleMax(String columnName) {
             this.columnName = columnName;
@@ -142,18 +154,22 @@ public abstract class MaximumAggregation extends AggregationFunction<Comparable,
         }
 
         @Override
+        public boolean isResultReady() {
+            return hasState;
+        }
+
+        @Override
         public void loadDocValues(LeafReader reader) throws IOException {
-            values = DocValues.getSortedNumeric(reader, columnName);
+            values = DocValues.getSorted(reader, columnName);
         }
 
         @Override
         public void apply(RamAccounting ramAccounting, int doc, MutableDouble state) throws IOException {
-            if (values.advanceExact(doc) && values.docValueCount() == 1) {
-                double value = NumericUtils.sortableLongToDouble(values.nextValue());
-                if (value >= state.value()) {
-                    state.setValue(value);
-                }
-            }
+            // Values are sorted from ordinal 0 to getValueCount()-1 in increasing order.
+            // SortedDocValues.lookupTerm utilizes that fact to perform binary search, we can take last for max.
+            BytesRef minRef = values.lookupOrd(values.getValueCount() - 1);
+            state.setValue(DoublePoint.decodeDimension(minRef.bytes, minRef.offset));
+            hasState = true;
         }
 
         @Override
@@ -166,11 +182,11 @@ public abstract class MaximumAggregation extends AggregationFunction<Comparable,
         }
     }
 
-
     private static class FloatMax implements DocValueAggregator<MutableFloat> {
 
         private final String columnName;
-        private SortedNumericDocValues values;
+        private SortedDocValues values;
+        private boolean hasState = false;
 
         public FloatMax(String columnName) {
             this.columnName = columnName;
@@ -183,18 +199,22 @@ public abstract class MaximumAggregation extends AggregationFunction<Comparable,
         }
 
         @Override
+        public boolean isResultReady() {
+            return hasState;
+        }
+
+        @Override
         public void loadDocValues(LeafReader reader) throws IOException {
-            values = DocValues.getSortedNumeric(reader, columnName);
+            values = DocValues.getSorted(reader, columnName);
         }
 
         @Override
         public void apply(RamAccounting ramAccounting, int doc, MutableFloat state) throws IOException {
-            if (values.advanceExact(doc) && values.docValueCount() == 1) {
-                float value = NumericUtils.sortableIntToFloat((int) values.nextValue());
-                if (value >= state.value()) {
-                    state.setValue(value);
-                }
-            }
+            // Values are sorted from ordinal 0 to getValueCount()-1 in increasing order.
+            // SortedDocValues.lookupTerm utilizes that fact to perform binary search, we can take last for max.
+            BytesRef minRef = values.lookupOrd(values.getValueCount() - 1);
+            state.setValue(FloatPoint.decodeDimension(minRef.bytes, minRef.offset));
+            hasState = true;
         }
 
         @Override

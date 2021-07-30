@@ -263,8 +263,17 @@ public class DocValuesAggregates {
                 if (killCause != null) {
                     Exceptions.rethrowUnchecked(killCause);
                 }
+
+                int readyAggregatesCount = 0;
                 for (int i = 0; i < aggregators.size(); i++) {
-                    aggregators.get(i).apply(ramAccounting, doc, cells[i]);
+                    if(aggregators.get(i).isResultReady()) {
+                        readyAggregatesCount++;
+                    } else {
+                        aggregators.get(i).apply(ramAccounting, doc, cells[i]);
+                    }
+                }
+                if(readyAggregatesCount == aggregators.size()) {
+                    break;
                 }
             }
         }
