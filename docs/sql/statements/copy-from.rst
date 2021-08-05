@@ -377,11 +377,9 @@ default value is 10000.
 ``fail_fast``
 '''''''''''''
 
-With this option set to true, CrateDB will check for any errors at the end of
-each batch processing, specified by the
-:ref:`bulk_size <sql-copy-from-bulk_size>`. Any occurrences of the errors will
-trigger the execution to terminate that will prevent executing further while
-completing any in-flight executions normally.
+If enabled, the ``COPY FROM`` operation will abort early after an error. This
+is best effort and due to the distributed execution, it may still continue
+processing records before it aborts.
 
 
 .. _sql-copy-from-shared:
