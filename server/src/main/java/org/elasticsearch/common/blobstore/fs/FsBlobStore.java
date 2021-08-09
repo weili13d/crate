@@ -72,11 +72,6 @@ public class FsBlobStore implements BlobStore {
     }
 
     @Override
-    public void delete(BlobPath path) throws IOException {
-        IOUtils.rm(buildPath(path));
-    }
-
-    @Override
     public void close() {
         // nothing to do here...
     }
