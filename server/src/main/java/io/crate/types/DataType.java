@@ -34,6 +34,7 @@ import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.io.stream.Writeable;
 
 import io.crate.Streamer;
+import io.crate.execution.engine.indexing.ValueIndexer;
 import io.crate.sql.tree.ColumnDefinition;
 import io.crate.sql.tree.ColumnPolicy;
 import io.crate.sql.tree.ColumnType;
@@ -217,6 +218,11 @@ public abstract class DataType<T> implements Comparable<DataType<?>>, Writeable,
      **/
     public boolean supportsStorage() {
         return true;
+    }
+
+    @Nullable
+    public ValueIndexer valueIndexer(String columnName) {
+        return null;
     }
 
 

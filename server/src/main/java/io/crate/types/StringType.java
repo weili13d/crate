@@ -21,20 +21,7 @@
 
 package io.crate.types;
 
-import io.crate.Streamer;
-import io.crate.common.unit.TimeValue;
-import io.crate.sql.tree.BitString;
-import io.crate.sql.tree.ColumnDefinition;
-import io.crate.sql.tree.ColumnPolicy;
-import io.crate.sql.tree.ColumnType;
-import io.crate.sql.tree.Expression;
-
-import org.apache.lucene.util.BytesRef;
-import org.elasticsearch.Version;
-import org.elasticsearch.common.Strings;
-import org.elasticsearch.common.io.stream.StreamInput;
-import org.elasticsearch.common.io.stream.StreamOutput;
-import org.elasticsearch.common.xcontent.XContentFactory;
+import static io.crate.common.StringUtils.isBlank;
 
 import java.io.IOException;
 import java.util.Arrays;
@@ -47,7 +34,22 @@ import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
-import static io.crate.common.StringUtils.isBlank;
+import org.apache.lucene.util.BytesRef;
+import org.elasticsearch.Version;
+import org.elasticsearch.common.Strings;
+import org.elasticsearch.common.io.stream.StreamInput;
+import org.elasticsearch.common.io.stream.StreamOutput;
+import org.elasticsearch.common.xcontent.XContentFactory;
+
+import io.crate.Streamer;
+import io.crate.common.unit.TimeValue;
+import io.crate.execution.engine.indexing.StringValueIndexer;
+import io.crate.execution.engine.indexing.ValueIndexer;
+import io.crate.sql.tree.BitString;
+import io.crate.sql.tree.ColumnDefinition;
+import io.crate.sql.tree.ColumnPolicy;
+import io.crate.sql.tree.ColumnType;
+import io.crate.sql.tree.Expression;
 
 public class StringType extends DataType<String> implements Streamer<String> {
 
@@ -290,5 +292,10 @@ public class StringType extends DataType<String> implements Streamer<String> {
         } else {
             return new ColumnType<>("varchar", List.of(lengthLimit));
         }
+    }
+
+    @Override
+    public ValueIndexer<String> valueIndexer(String columnName) {
+        return new StringValueIndexer(columnName);
     }
 }

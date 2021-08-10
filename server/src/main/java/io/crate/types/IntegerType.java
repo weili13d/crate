@@ -22,6 +22,9 @@
 package io.crate.types;
 
 import io.crate.Streamer;
+import io.crate.execution.engine.indexing.IntValueIndexer;
+import io.crate.execution.engine.indexing.ValueIndexer;
+
 import org.apache.lucene.util.RamUsageEstimator;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
@@ -122,5 +125,10 @@ public class IntegerType extends DataType<Integer> implements Streamer<Integer>,
     @Override
     public int fixedSize() {
         return INTEGER_SIZE;
+    }
+
+    @Override
+    public ValueIndexer<Integer> valueIndexer(String columnName) {
+        return new IntValueIndexer(columnName);
     }
 }
