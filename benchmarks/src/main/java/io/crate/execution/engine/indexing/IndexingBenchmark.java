@@ -23,16 +23,19 @@ package io.crate.execution.engine.indexing;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.NumericDocValuesField;
+import org.apache.lucene.index.IndexableFieldType;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.inject.Injector;
+import org.elasticsearch.common.io.stream.BytesStreamOutput;
 import org.elasticsearch.common.settings.Settings;
 import org.elasticsearch.common.xcontent.XContentFactory;
 import org.elasticsearch.common.xcontent.XContentType;
@@ -58,18 +61,18 @@ import org.openjdk.jmh.annotations.Setup;
 import org.openjdk.jmh.annotations.State;
 import org.openjdk.jmh.annotations.Warmup;
 
+import io.crate.Streamer;
 import io.crate.action.sql.BaseResultReceiver;
 import io.crate.action.sql.SQLOperations;
-import io.crate.analyze.Analyzer;
 import io.crate.data.Row;
 import io.crate.execution.dml.upsert.GeneratedColumns.Validation;
 import io.crate.execution.dml.upsert.InsertSourceGen;
 import io.crate.metadata.CoordinatorTxnCtx;
 import io.crate.metadata.NodeContext;
+import io.crate.metadata.Reference;
 import io.crate.metadata.RelationName;
 import io.crate.metadata.Schemas;
 import io.crate.metadata.doc.DocTableInfo;
-import io.crate.planner.Planner;
 import io.crate.plugin.SQLPlugin;
 
 @BenchmarkMode(Mode.AverageTime)
@@ -82,8 +85,6 @@ public class IndexingBenchmark {
 
     private Node node;
     private SQLOperations sqlOperations;
-    private Analyzer analyzer;
-    private Planner planner;
     private ClusterService clusterService;
     private NodeContext nodeCtx;
     private Schemas schemas;
@@ -107,8 +108,6 @@ public class IndexingBenchmark {
         node.start();
         Injector injector = node.injector();
         sqlOperations = injector.getInstance(SQLOperations.class);
-        analyzer = injector.getInstance(Analyzer.class);
-        planner = injector.getInstance(Planner.class);
         clusterService = injector.getInstance(ClusterService.class);
         nodeCtx = injector.getInstance(NodeContext.class);
         schemas = injector.getInstance(Schemas.class);
@@ -127,7 +126,7 @@ public class IndexingBenchmark {
 
 
     @Benchmark
-    public ParsedDocument measure_indexing_using_source_generation_and_parse() throws Exception {
+    public ParsedDocument measure_indexing_using_source_generation_and_doc_mapper_parse() throws Exception {
         DocTableInfo table = schemas.getTableInfo(new RelationName("doc", "users"));
         InsertSourceGen sourceGen = InsertSourceGen.of(
             CoordinatorTxnCtx.systemTransactionContext(),
@@ -150,7 +149,7 @@ public class IndexingBenchmark {
     }
 
     @Benchmark
-    public Document measure_indexing_using_analysed_structures_and_indexers() throws Exception {
+    public Document measure_indexing_using__indexers() throws Exception {
         DocTableInfo table = schemas.getTableInfo(new RelationName("doc", "users"));
         Object[] values = new Object[] { 10, "Arthur" };
         Indexer indexer = new Indexer(table.columns());
@@ -158,7 +157,7 @@ public class IndexingBenchmark {
     }
 
     @Benchmark
-    public ParsedDocument measure_indexing_using_analysed_structures_and_indexers_creating_parsed_doc() throws Exception {
+    public ParsedDocument measure_indexing_using__indexers_creating_parsed_doc() throws Exception {
         DocTableInfo table = schemas.getTableInfo(new RelationName("doc", "users"));
         Object[] values = new Object[] { 10, "Arthur" };
         Indexer indexer = new Indexer(table.columns());
@@ -180,6 +179,32 @@ public class IndexingBenchmark {
             (String) null,
             List.of(doc),
             source,
+            (Mapping) null
+        );
+    }
+
+    @Benchmark
+    public ParsedDocument measure_indexing_using_indexers_creating_parsed_doc_with_binary_source() throws Exception {
+        DocTableInfo table = schemas.getTableInfo(new RelationName("doc", "users"));
+        Object[] values = new Object[] { 10, "Arthur" };
+        Indexer indexer = new Indexer(table.columns());
+        Document doc = indexer.createDoc(values);
+        Iterator<Reference> it = table.columns().iterator();
+        var out = new BytesStreamOutput();
+        for (int i = 0; i < values.length; i++) {
+            var value = values[i];
+            Reference columnRef = it.next();
+            Streamer<?> streamer = columnRef.valueType().streamer();
+            ((Streamer) streamer).writeValueTo(out, value);
+        }
+        Field version = new NumericDocValuesField("_version", -1L);
+        return new ParsedDocument(
+            version,
+            SequenceIDFields.emptySeqID(),
+            "10",
+            (String) null,
+            List.of(doc),
+            out.bytes(),
             (Mapping) null
         );
     }
