@@ -28,9 +28,12 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.lucene.analysis.standard.StandardAnalyzer;
 import org.apache.lucene.document.Field;
 import org.apache.lucene.document.NumericDocValuesField;
-import org.apache.lucene.index.IndexableFieldType;
+import org.apache.lucene.index.IndexWriter;
+import org.apache.lucene.index.IndexWriterConfig;
+import org.apache.lucene.store.ByteBuffersDirectory;
 import org.elasticsearch.cluster.metadata.IndexMetadata;
 import org.elasticsearch.cluster.service.ClusterService;
 import org.elasticsearch.common.bytes.BytesReference;
@@ -89,6 +92,8 @@ public class IndexingBenchmark {
     private NodeContext nodeCtx;
     private Schemas schemas;
     private DocumentMapper documentMapper;
+    private Document doc;
+    private IndexWriter indexWriter;
 
     @Setup
     public void createEnv() throws Exception {
@@ -122,8 +127,32 @@ public class IndexingBenchmark {
         IndexMetadata index = clusterService.state().getMetadata().index("users");
         IndexService indexService = indices.indexService(index.getIndex());
         documentMapper = indexService.mapperService().documentMapper();
+
+        indexWriter = new IndexWriter(
+            new ByteBuffersDirectory(),
+            new IndexWriterConfig(new StandardAnalyzer())
+        );
+        doc = new Document();
+        var intValueIndexer = new IntValueIndexer("id");
+        for (var field : intValueIndexer.indexValue(10)) {
+            doc.add(field);
+        }
+        var stringIndexer = new StringValueIndexer("name");
+        for (var field : stringIndexer.indexValue("Arthur")) {
+            doc.add(field);
+        }
     }
 
+    @Benchmark
+    public long measure_index_writer_add_document() throws Exception {
+        return indexWriter.addDocument(doc);
+    }
+
+    @Benchmark
+    public long measure_index_writer_add_document_and_commit() throws Exception {
+        indexWriter.addDocument(doc);
+        return indexWriter.commit();
+    }
 
     @Benchmark
     public ParsedDocument measure_indexing_using_source_generation_and_doc_mapper_parse() throws Exception {
