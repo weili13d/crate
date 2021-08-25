@@ -30,7 +30,7 @@ import io.crate.user.UserLookup;
 
 public class TrustAuthenticationMethod implements AuthenticationMethod {
 
-    static final String NAME = "trust";
+    public static final String NAME = "trust";
     private final UserLookup userLookup;
 
     public TrustAuthenticationMethod(UserLookup userLookup) {

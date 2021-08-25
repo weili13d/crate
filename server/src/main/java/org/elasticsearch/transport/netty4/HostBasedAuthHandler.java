@@ -25,6 +25,8 @@ import java.net.InetAddress;
 
 import javax.security.sasl.AuthenticationException;
 
+import io.crate.auth.TrustAuthenticationMethod;
+import io.netty.handler.ssl.SslHandler;
 import org.elasticsearch.common.network.CloseableChannel;
 import org.elasticsearch.http.netty4.Netty4HttpServerTransport;
 
@@ -37,6 +39,8 @@ import io.netty.channel.Channel;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundHandlerAdapter;
 import io.netty.util.ReferenceCountUtil;
+
+import static org.elasticsearch.transport.netty4.Netty4Transport.SERVER_SSL_HANDLER_NAME;
 
 public class HostBasedAuthHandler extends ChannelInboundHandlerAdapter {
 
@@ -75,6 +79,14 @@ public class HostBasedAuthHandler extends ChannelInboundHandlerAdapter {
         try {
             authMethod.authenticate(userName, null, connectionProperties);
             ctx.pipeline().remove(this);
+
+            if (authMethod.name().equals(TrustAuthenticationMethod.NAME)) {
+                SslHandler sslHandler = (SslHandler) ctx.pipeline().get(SERVER_SSL_HANDLER_NAME);
+                if (sslHandler != null) {
+                    ctx.pipeline().remove(sslHandler);
+                }
+            }
+
             super.channelRead(ctx, msg);
         } catch (Exception e) {
             ReferenceCountUtil.release(msg);
