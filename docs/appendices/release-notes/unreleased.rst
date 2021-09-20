@@ -86,6 +86,9 @@ Changes
 
 - Added support of ``numeric`` type to the ``avg`` aggregation function.
 
+- Added `object_details` to the `information_schema.columns` table including the
+  top level column for objects, path information and leaf name
+
 
 Fixes
 =====
