@@ -54,6 +54,9 @@ None
 Changes
 =======
 
+- Added support to use an aggregation function in order by without having them
+  in the select list e.g.: ``select x from tbl group by x order by count(1)``
+
 - Added an empty ``pg_catalog.pg_indexes`` table for compatibility with
   PostgreSQL.
 

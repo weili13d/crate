@@ -205,4 +205,35 @@ public class AggregateExpressionIntegrationTest extends SQLIntegrationTestCase {
                    is("a| 3\n" +
                       "b| 0\n"));
     }
+
+    @Test
+    public void test_aggregation_in_order_by_without_having_them_in_the_select_list() throws Exception {
+        execute("create table test(name varchar) clustered into 1 shards with(number_of_replicas=0)");
+        execute("insert into test(name) values ('a'),('a'),('a'),('b'),('b'),('c')");
+        execute("refresh table test");
+
+        execute("select name from test group by name order by count(1)");
+        assertThat(printedTable(response.rows()),
+                   is("c\n" +
+                      "b\n" +
+                      "a\n"));
+
+        execute("select name from test group by name order by count(*)");
+        assertThat(printedTable(response.rows()),
+                   is("c\n" +
+                      "b\n" +
+                      "a\n"));
+
+        execute("select name from test group by name order by count(*) asc");
+        assertThat(printedTable(response.rows()),
+                   is("c\n" +
+                      "b\n" +
+                      "a\n"));
+
+        execute("select name from test group by name order by count(*) desc");
+        assertThat(printedTable(response.rows()),
+                   is("a\n" +
+                      "b\n" +
+                      "c\n"));
+    }
 }

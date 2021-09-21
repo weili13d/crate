@@ -27,7 +27,6 @@ import io.crate.expression.symbol.ScopedSymbol;
 import io.crate.expression.symbol.Symbol;
 import io.crate.expression.symbol.SymbolVisitor;
 import io.crate.expression.symbol.Symbols;
-import io.crate.metadata.FunctionType;
 import io.crate.metadata.Reference;
 
 import java.util.Collection;
@@ -56,6 +55,7 @@ public class OrderByWithAggregationValidator {
     private static class ValidatorContext {
         private final Collection<? extends Symbol> outputSymbols;
         private final boolean isDistinct;
+        private Function aggregateFunction;
 
         ValidatorContext(Collection<? extends Symbol> outputSymbols, boolean isDistinct) {
             this.outputSymbols = outputSymbols;
@@ -77,14 +77,27 @@ public class OrderByWithAggregationValidator {
             if (context.isDistinct) {
                 throw new UnsupportedOperationException(Symbols.format(INVALID_FIELD_IN_DISTINCT_TEMPLATE, symbol));
             }
-            if (symbol.type() == FunctionType.SCALAR) {
-                for (Symbol arg : symbol.arguments()) {
-                    arg.accept(this, context);
-                }
-            } else {
-                throw new UnsupportedOperationException(
+            switch (symbol.type()) {
+                case AGGREGATE:
+                    if (context.aggregateFunction == null) {
+                        context.aggregateFunction = symbol;
+                        for (Symbol arg : symbol.arguments()) {
+                            arg.accept(this, context);
+                        }
+                        break;
+                    } else {
+                        throw new UnsupportedOperationException(
+                            Symbols.format("Aggregate function calls cannot be nested '%s'.", context.aggregateFunction));
+                    }
+                case SCALAR:
+                    for (Symbol arg : symbol.arguments()) {
+                        arg.accept(this, context);
+                    }
+                    break;
+                default:
+                    throw new UnsupportedOperationException(
                         Symbols.format("ORDER BY function '%s' is not allowed. " +
-                                       "Only scalar functions can be used", symbol));
+                                       "Only scalar or aggregate functions can be used", symbol));
             }
             return null;
         }
