@@ -114,9 +114,8 @@ public class InformationColumnsTableInfo {
             .add("udt_name", STRING, ignored -> null)
             .add("check_references", STRING, ignored -> null)
             .add("check_action", INTEGER, ignored -> null)
-            .startObject("object_details")
+            .startObject("column_details")
                 .add("name", STRING , r -> r.info.column().name())
-                .add("leaf", STRING , r -> r.info.column().leafName())
                 .add("path", STRING_ARRAY, r -> r.info.column().path())
             .endObject()
             .setPrimaryKeys(
